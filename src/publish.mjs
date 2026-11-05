@@ -34,7 +34,7 @@ export function chapters(clips, options = {}) {
   rows = rows.filter(r => r.time < total - 10).sort((a, b) => a.time - b.time);
   const out = [];
   for (const r of rows) if (!out.length || r.time - out.at(-1).time >= 10) out.push(r);
-  if (out.length && out[0].time > 0.5) out.unshift({ time: 0, title: 'Intro' }); else if (out.length) out[0].time = 0;
+  if (out.length && out[0].time >= 10) out.unshift({ time: 0, title: 'Intro' }); else if (out.length) out[0].time = 0;
   return out.length >= 3 ? out.map(r => ({ time: Math.round(r.time), title: r.title, line: `${fmt(r.time)} ${r.title}` })) : [];
 }
 
