@@ -1446,7 +1446,7 @@ export async function exportTimelineProject(id, request = {}) {
   const file = path.join(dir, `${project.name.replace(/[^\p{L}\p{N} _-]/gu, '').trim().slice(0, 40) || 'edit'} rev${project.revision}.${out.extension}`);
   await fs.writeFile(file, out.content, 'utf8');
   return { format: request.format ?? 'edl', fps, file, mime: out.mime, bytes: Buffer.byteLength(out.content), content: out.content.length > 200_000 ? `${out.content.slice(0, 200_000)}\n…` : out.content,
-    note: { edl: 'CMX3600 for Premiere, Resolve and Avid (cuts, speed via M2; transitions as comments).', fcpxml: 'FCPXML 1.9 for Final Cut Pro and DaVinci Resolve.', otio: 'OpenTimelineIO for Resolve, Premiere (via plugin) and pipelines.', csv: 'Shot list for spreadsheets.', chapters: 'YouTube chapters from sections or labelled markers.' }[request.format ?? 'edl'] };
+    note: { edl: 'CMX3600 for Premiere, Resolve and Avid (cuts, speed via M2; transitions as comments).', fcpxml: 'FCPXML 1.9 for Final Cut Pro and DaVinci Resolve.', otio: 'OpenTimelineIO for Resolve, Premiere (via plugin) and pipelines (cuts, speed and transitions).', csv: 'Shot list for spreadsheets.', chapters: 'YouTube chapters from sections or labelled markers.' }[request.format ?? 'edl'] };
 }
 
 /** Review notes pinned to the edit (anchored to a shot so they move with it). Not part of the edit history. */

@@ -161,10 +161,44 @@ test('timeline export: EDL, CSV, chapters, FCPXML and OTIO are well formed', () 
   assert.match(fcp, /<project name="A &amp; B">/); assert.match(fcp, /file:\/\/\/C:\/media\/cam%20a\.mp4/); assert.match(fcp, /lane="-1" name="Voice"/);
   assert.equal((fcp.match(/<asset-clip ref="a/g) ?? []).length, 3);
   const otio = JSON.parse(exportTimeline({ format: 'otio', clips, sources, options }).content);
-  assert.equal(otio.tracks.children[0].children.length, 3); assert.equal(otio.tracks.children[1].kind, 'Audio');
+  assert.equal(otio.tracks.children[0].children.filter(i => i.OTIO_SCHEMA === 'Clip.2').length, 3); assert.equal(otio.tracks.children[1].kind, 'Audio');
   const rb = layout(clips)[1];
   assert.equal(otio.tracks.children[0].children[1].source_range.duration.value, Math.round((rb.visibleEnd - rb.visibleStart) * 1.5 * 30), 'speed changes map to source frames');
   assert.throws(() => exportTimeline({ format: 'aaf', clips, sources }), /format/);
+});
+
+test('timeline export: OTIO carries transitions as Transition.1 items between the clips', () => {
+  const sources = [src(40), src(40)];
+  const items = (clips, fps = 30) => JSON.parse(exportTimeline({ format: 'otio', clips, sources, options: {}, fps }).content).tracks.children[0].children;
+  const kinds = list => list.map(i => i.OTIO_SCHEMA);
+  const a = { id: 'a', sourceIndex: 0, start: 1, end: 5 }, b = { id: 'b', sourceIndex: 1, start: 10, end: 13 };
+  const withC = (transition, transitionSeconds) => ({ id: 'c', sourceIndex: 0, start: 20, end: 24, transition, transitionSeconds });
+
+  const fade = items([a, b, withC('fade', 0.4)]);
+  assert.deepEqual(kinds(fade), ['Clip.2', 'Clip.2', 'Transition.1', 'Clip.2']);
+  assert.equal(fade[2].transition_type, 'SMPTE_Dissolve');
+  assert.equal(fade[2].in_offset.value, 6); assert.equal(fade[2].out_offset.value, 6); assert.equal(fade[2].in_offset.rate, 30);
+
+  const wipe = items([a, b, withC('wipeleft', 0.4)])[2];
+  assert.equal(wipe.transition_type, 'Custom_Transition');
+  assert.equal(wipe.name, 'wipeleft'); assert.equal(wipe.metadata.aiEditStudio.transition, 'wipeleft');
+
+  assert.deepEqual(kinds(items([a, b])), ['Clip.2', 'Clip.2'], 'cuts add no transitions');
+
+  const odd = items([a, b, withC('fade', 0.5)])[2];
+  assert.ok(Number.isInteger(odd.in_offset.value) && Number.isInteger(odd.out_offset.value), 'offsets are whole frames');
+
+  // A clip squeezed between two transitions at the 0.5x limit: its two offsets use up all of its frames, never more.
+  const clips = [{ id: 'a', sourceIndex: 0, start: 0, end: 4 }, { id: 'b', sourceIndex: 0, start: 10, end: 11.2, transition: 'fade', transitionSeconds: 5 }, withC('fade', 5)];
+  const squeezed = items(clips);
+  assert.deepEqual(kinds(squeezed), ['Clip.2', 'Transition.1', 'Clip.2', 'Transition.1', 'Clip.2']);
+  squeezed.forEach((item, i) => {
+    if (item.OTIO_SCHEMA !== 'Clip.2') return;
+    const used = (squeezed[i - 1]?.out_offset?.value ?? 0) + (squeezed[i + 1]?.in_offset?.value ?? 0);
+    assert.ok(used <= item.source_range.duration.value, `the transitions around clip ${i} fit inside it`);
+  });
+  const total = squeezed.filter(i => i.OTIO_SCHEMA === 'Clip.2').reduce((sum, i) => sum + i.source_range.duration.value, 0);
+  assert.equal(total, Math.round(totalDuration(clips) * 30), 'the track is as long as the edit');
 });
 
 test('0.8 tools: 46 tools, schemas validate, version gate, routes', async () => {
