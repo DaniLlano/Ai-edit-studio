@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const json = async file => JSON.parse(await fs.readFile(path.join(ROOT, file), 'utf8'));
-const { agentTools, STUDIO_VERSION } = await import('../src/agent-tools.mjs');
+const { agentTools, STUDIO_VERSION, callAgentTool } = await import('../src/agent-tools.mjs');
 
 test('MCP Registry entry agrees with the npm package, so publishing cannot fail on a mismatch', async () => {
   const pkg = await json('package.json'), server = await json('server.json');
@@ -42,10 +42,19 @@ test('`cli.mjs mcp` (what npx runs for the registry) speaks MCP on stdout and pr
     send({ id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'registry-test', version: '1' } } });
     const init = await next();
     assert.equal(init.id, 1); assert.equal(init.result.serverInfo.name, 'ai-edit-studio'); assert.equal(init.result.serverInfo.version, STUDIO_VERSION);
+    assert.match(init.result.instructions, /studio_music\b/); assert.match(init.result.instructions, /studio_apply\b/);
     send({ method: 'notifications/initialized' });
     send({ id: 2, method: 'tools/list' });
     const listed = await next();
     assert.equal(listed.id, 2); assert.equal(listed.result.tools.length, agentTools.length);
     assert.ok(listed.result.tools.some(t => t.name === 'studio_render'));
   } finally { child.kill(); }
+});
+
+test('studio_schema points agents at the music engine and story documents, and only names real tools', async () => {
+  const schema = await callAgentTool('studio_schema', {});
+  const text = `${JSON.stringify(schema.capabilities)} ${schema.quickstart}`;
+  assert.match(text, /studio_music\b/); assert.match(text, /studio_apply\b/);
+  const real = new Set(agentTools.map(t => t.name));
+  for (const name of text.match(/studio_[a-z_]+/g)) assert.ok(real.has(name), `${name} is a real tool`);
 });
