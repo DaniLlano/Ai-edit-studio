@@ -21,7 +21,7 @@ Send `X-Studio-Client: <your-agent-name>` on HTTP calls: the editor shows your n
 - `studio_guide {topic:"story"}` returns the `aes.story/1` format with a complete example. `studio_apply {story, dryRun:true}`
   validates it and returns the beat schedule, named events (`<scene>.in`, `.out`, `.l1`, `.sub`, `.cta`, …), drops and
   warnings (reading time, shots under 0.8 s, drops off the bar line, dissolves between text cards) without rendering.
-- `studio_apply {story}` builds it: generated scenes (`title`, `counter`, `terminal`, `chips`, `card/end`: kinetic type,
+- `studio_apply {story}` builds it: generated scenes (`title`, `counter`, `bars`, `terminal`, `chips`, `card/end`: kinetic type,
   glow, grid, film grain, rendered locally by FFmpeg + libass) and your footage scenes become one ordinary project. Every
   scene is timed in beats at `music.bpm`; a transition into a scene overlaps the previous one and ends on the beat.
   Returns `{buildId}`: poll `studio_apply {action:"status", buildId}`; the result holds `projectId`, `revision` and the

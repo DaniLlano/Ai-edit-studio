@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { compileStory, storySummary, renderGeneratedScene, STORY_GUIDE, readSeconds } from '../src/story.mjs';
+import { compileStory, storySummary, renderGeneratedScene, STORY_GUIDE, readSeconds, sceneAss } from '../src/story.mjs';
 import { agentTools, callAgentTool } from '../src/agent-tools.mjs';
 import { findFfmpegTools } from '../src/ffmpeg.mjs';
 
@@ -68,5 +68,59 @@ test('a generated scene renders to the right size and length, and is reused the 
   const info = await probeMedia(first.file);
   assert.equal(info.video.width, 720); assert.equal(info.video.height, 1280);
   assert.ok(info.duration >= 1 && info.duration < 1.2, `duration ${info.duration}`);
+  await fs.rm(dir, { recursive: true, force: true });
+});
+
+const bars = (id, extra = {}) => ({ id, kind: 'bars', beats: 8, items: [{ label: 'Before', value: 42 }, { label: 'After', value: 6 }], ...extra });
+
+test('a bars scene compiles, is scheduled on a stagger and fires its done event', () => {
+  const c = compileStory({ version: 'aes.story/1', music: { bpm: 120 }, scenes: [scene('a'), bars('b', { title: 'Build time', suffix: ' s' })] });
+  const sc = c.scenes[1].schedule;
+  assert.equal(sc.bars.length, 2);
+  assert.ok(sc.bars[1][0] > sc.bars[0][0], 'bars start one after another');
+  assert.ok(c.events['b.done'] > c.events['b.in'] && c.events['b.done'] < c.events['b.out']);
+});
+
+test('bars: bad input is refused in plain words', () => {
+  const run = extra => compileStory({ scenes: [bars('b', extra)] });
+  assert.throws(() => run({ items: [] }), /items needs 1 to 8/);
+  assert.throws(() => run({ items: Array.from({ length: 9 }, (_, i) => ({ label: `L${i}`, value: i })) }), /items needs 1 to 8/);
+  assert.throws(() => run({ items: [{ label: 'A', value: -1 }] }), /value must be a number of 0 or more/);
+  assert.throws(() => run({ items: [{ label: 'x'.repeat(25), value: 1 }] }), /at most 24 characters/);
+  assert.throws(() => run({ max: 10 }), /max .* below the largest value/);
+  assert.throws(() => run({ highlight: 2 }), /highlight/);
+  assert.throws(() => run({ highlight: -1 }), /highlight/);
+});
+
+test('bars: a last value that is on screen for under a second warns', () => {
+  const quick = compileStory({ music: { bpm: 120 }, scenes: [bars('b', { beats: 2 })] });
+  assert.ok(quick.warnings.some(w => w.code === 'READ_TIME' && w.scene === 'b'));
+  const fine = compileStory({ music: { bpm: 120 }, scenes: [bars('b', { beats: 8 })] });
+  assert.ok(!fine.warnings.some(w => w.code === 'READ_TIME'));
+});
+
+test('bars: the ASS has one bar per item, the widest is the largest value, and the highlight uses the accent', () => {
+  const items = [{ label: 'A', value: 10 }, { label: 'B', value: 40 }, { label: 'C', value: 25 }];
+  const c = compileStory({ music: { bpm: 120 }, style: { accent: '#112233' }, scenes: [bars('b', { items, highlight: 1 })] });
+  const rows = sceneAss(c, c.scenes[0]).split('\n').filter(l => l.startsWith('Dialogue:') && l.includes('\\p1') && l.includes('\\fscx1\\t('));
+  assert.equal(rows.length, 3);
+  const widths = rows.map(l => { const m = l.match(/\}m (\d+) 0 l (\d+) 0 /); return Number(m[1]) + Number(m[2]); });
+  assert.equal(widths.indexOf(Math.max(...widths)), 1);
+  assert.ok(widths[0] < widths[2] && widths[2] < widths[1]);
+  assert.deepEqual(rows.map(l => l.includes('\\c&H332211&')), [false, true, false]);
+});
+
+test('a bars scene renders at the right size and length in every delivery', async t => {
+  let tools; try { tools = findFfmpegTools(); } catch { return t.skip('FFmpeg not available'); }
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'aes-bars-'));
+  const { probeMedia } = await import('../src/ffmpeg.mjs');
+  const sizes = { 'vertical-share': [720, 1280], 'landscape-share': [1280, 720], square: [720, 720], portrait: [720, 900] };
+  for (const [deliver, [width, height]] of Object.entries(sizes)) {
+    const c = compileStory({ version: 'aes.story/1', deliver, size: '720', music: { bpm: 120 }, scenes: [bars('b', { beats: 4, title: 'Build time', suffix: ' s', highlight: 1, sourceNote: 'Source: CI logs' })] });
+    const out = await renderGeneratedScene(c, c.scenes[0], dir, { ffmpeg: tools.ffmpeg });
+    const info = await probeMedia(out.file);
+    assert.equal(info.video.width, width, deliver); assert.equal(info.video.height, height, deliver);
+    assert.ok(info.duration >= 2 && info.duration < 2.2, `${deliver} duration ${info.duration}`);
+  }
   await fs.rm(dir, { recursive: true, force: true });
 });

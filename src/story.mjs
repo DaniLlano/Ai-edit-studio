@@ -1,6 +1,6 @@
 // Story documents (aes.story/1): a whole video described once, timed in beats, built in one call.
 // compileStory() is pure: it validates the document and returns cut times, events, drops, sound effects, texts and
-// warnings. renderGeneratedScene() turns one generated scene (title, counter, terminal, chips, card/end) into a
+// warnings. renderGeneratedScene() turns one generated scene (title, counter, bars, terminal, chips, card/end) into a
 // video file with FFmpeg + libass — kinetic type, glow, film grain — so no extra dependencies are needed.
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -10,7 +10,7 @@ import { runProcess } from './process.mjs';
 
 export const STORY_VERSION = 'aes.story/1';
 export const STORY_ENGINE_VERSION = 1;
-export const GENERATED_KINDS = ['title', 'counter', 'terminal', 'chips', 'card/end'];
+export const GENERATED_KINDS = ['title', 'counter', 'bars' , 'terminal', 'chips', 'card/end'];
 export const TRANSITIONS = ['cut', 'fade', 'fadeblack', 'fadewhite', 'wipeleft', 'wiperight', 'slideleft', 'slideright', 'circleopen', 'smoothleft', 'pixelize', 'radial'];
 const DEFAULT_TRANSITION_SECONDS = { fade: 0.4, fadeblack: 0.3, fadewhite: 0.2 };
 const SFX_KINDS = ['whoosh', 'hit', 'pop', 'riser', 'click', 'drop'];
@@ -74,6 +74,16 @@ export function sceneSchedule(scene) {
     case 'counter': {
       const count = Math.min(scene.countBeats ?? b * 0.6, b - 0.25);
       return { title: 0, count: [0.1, count], label: 0.25, sub: Math.min(b - 0.5, scene.subBeat ?? 1.5), events: { done: count } };
+    }
+    case 'bars': {
+      // Bars fill one after another; a value shows when its bar is full; `done` is the last bar full.
+      const start = scene.title ? 0.4 : 0;
+      const room = Math.max(0.25, b - 0.25 - start);
+      const grow = Math.min(1, room / 2);
+      const n = scene.items.length;
+      const step = n > 1 ? Math.min(0.4, (room - grow) / (n - 1)) : 0;
+      const bars = scene.items.map((_, i) => [start + i * step, start + i * step + grow]);
+      return { title: 0, bars, note: scene.sourceNote ? Math.min(b - 0.5, bars.at(-1)[1] + 0.25) : null, events: { done: bars.at(-1)[1] } };
     }
     case 'terminal': {
       const typing = Math.min(1.25, b * 0.3);
@@ -152,6 +162,30 @@ function normalizeScene(raw, i, ids) {
     s.sourceNote = str(raw.sourceNote, 120, `Scene ${id}: sourceNote`);
     if (raw.countBeats !== undefined) s.countBeats = num(raw.countBeats, 1, 0.25, 64, `Scene ${id}: countBeats`);
     if (raw.subBeat !== undefined) s.subBeat = num(raw.subBeat, 1, 0, 256, `Scene ${id}: subBeat`);
+    s.locale = str(raw.locale, 20, `Scene ${id}: locale`) || 'en-US';
+  } else if (kind === 'bars') {
+    s.title = str(raw.title, 60, `Scene ${id}: title`);
+    if (!Array.isArray(raw.items) || !raw.items.length || raw.items.length > 8) fail(`Scene ${id}: items needs 1 to 8 entries, each {label, value}.`);
+    s.items = raw.items.map((x, k) => {
+      if (!isObj(x)) fail(`Scene ${id}: item ${k + 1} must be {label, value}.`);
+      if (typeof x.label !== 'string' || !x.label.trim()) fail(`Scene ${id}: item ${k + 1} needs a label.`);
+            if (x.label.length > 24) fail(`Scene ${id}: item ${k + 1} label is ${x.label.length} characters; use at most 24 characters.`);
+      const value = typeof x.value === 'number' ? x.value : typeof x.value === 'string' && x.value.trim() ? Number(x.value) : NaN;
+      if (!Number.isFinite(value) || value < 0 || value > 1e12) fail(`Scene ${id}: item ${k + 1} value must be a number of 0 or more.`);
+      return { label: str(x.label, 24, `Scene ${id}: item ${k + 1} label`, true), value };
+    });
+    const largest = Math.max(...s.items.map(x => x.value));
+    if (raw.max !== undefined) {
+      s.max = num(raw.max, 0, 0, 1e12, `Scene ${id}: max`);
+      if (s.max < largest) fail(`Scene ${id}: max ${s.max} is below the largest value (${largest}); raise it or leave it out.`);
+    }
+    if (raw.highlight !== undefined) {
+      if (!Number.isInteger(raw.highlight) || raw.highlight < 0 || raw.highlight >= s.items.length) fail(`Scene ${id}: highlight must be an item number from 0 to ${s.items.length - 1}.`);
+      s.highlight = raw.highlight;
+    }
+    s.decimals = Math.round(num(raw.decimals, 0, 0, 3, `Scene ${id}: decimals`));
+    s.prefix = str(raw.prefix, 8, `Scene ${id}: prefix`); s.suffix = str(raw.suffix, 12, `Scene ${id}: suffix`);
+    s.sourceNote = str(raw.sourceNote, 120, `Scene ${id}: sourceNote`);
     s.locale = str(raw.locale, 20, `Scene ${id}: locale`) || 'en-US';
   } else if (kind === 'terminal') {
     s.title = str(raw.title, 60, `Scene ${id}: title`);
@@ -266,6 +300,11 @@ export function compileStory(story) {
     const check = (text, b, what) => { if (text && b !== null && b !== undefined && left(b) < readSeconds(text)) warnings.push({ code: 'READ_TIME', scene: s.id, message: `Scene ${s.id}: ${what} "${text.slice(0, 40)}" is on screen ${r3(left(b))} s; it needs about ${r3(readSeconds(text))} s to read. Give the scene more beats or show it earlier.` }); };
     if (s.kind === 'title') { s.lines.forEach((l, i) => check(l, sc.lines[i], `line ${i + 1}`)); check(s.sub, sc.sub, 'sub'); }
     if (s.kind === 'counter') { check(s.sub, sc.sub, 'sub'); }
+    if (s.kind === 'bars') {
+      // The last value shows when its bar is full: it needs about a second on screen.
+      const shown = left(sc.events.done);
+      if (shown < 1) warnings.push({ code: 'READ_TIME', scene: s.id, message: `Scene ${s.id}: the last value is on screen ${r3(shown)} s; give it about 1 s (more beats or fewer bars).` });
+    }
     if (s.kind === 'chips') check(s.footer, sc.footer, 'footer');
     if (s.kind === 'terminal' && s.output.length) {
       // Code is scanned, not read word by word: the last line needs about a second on screen.
@@ -363,9 +402,11 @@ class Ass {
     }
     this.rows.push([layer, t0, t1, `{${body}${a}}${text}`]);
   }
-  shape({ t0, t1, d, color, alpha = 0, layer = 1, anim = 'fade', blur = 0, x = 0, y = 0, border, borderColor }) {
+  shape({ t0, t1, d, color, alpha = 0, layer = 1, anim = 'fade', blur = 0, x = 0, y = 0, border, borderColor, grow = 0.5 }) {
     const al = `&H${Math.round(alpha * 255).toString(16).padStart(2, '0').toUpperCase()}&`;
-    const a = { fade: `\\alpha&HFF&\\t(0,240,\\alpha${al})`, pop: `\\alpha&HFF&\\t(0,90,\\alpha${al})`, none: `\\alpha${al}` }[anim];
+    // grow: the shape is drawn from its top-left (\an7), so scaling X from 1 to 100 % widens it from the left edge.
+    const a = { fade: `\\alpha&HFF&\\t(0,240,\\alpha${al})`, pop: `\\alpha&HFF&\\t(0,90,\\alpha${al})`, none: `\\alpha${al}`,
+      grow: `\\alpha${al}\\fscx1\\t(0,${ms(grow)},0.5,\\fscx100)` }[anim];
     const bord = border ? `\\bord${border}\\3c${assColor(borderColor ?? color)}\\3a&H60&` : '\\bord0';
     this.rows.push([layer, t0, t1, `{\\an7\\pos(${Math.round(x)},${Math.round(y)})\\p1\\c${assColor(color)}${bord}\\shad0${blur ? `\\blur${blur}` : ''}${a}}${d}{\\p0}`]);
   }
@@ -433,6 +474,27 @@ export function sceneAss(c, scene, fonts = defaultFonts()) {
     if (scene.label) A.text({ t0: at(sc.label), t1: end, x: cx, y: cy + size * 0.68, text: accentText(scene.label, st.accent, st.accent2), size: Math.max(36, size * 0.3), font: fonts.body, color: st.accent, anim: 'rise', glow: 0.3 });
     if (scene.sub) A.text({ t0: at(sc.sub), t1: end, x: cx, y: cy + size * 1.05, text: esc(scene.sub), size: Math.max(28, size * 0.2), font: fonts.body, color: st.muted, anim: 'rise' });
     if (scene.sourceNote) A.text({ t0: at(sc.label), t1: end, x: cx, y: bottom - 30, text: esc(scene.sourceNote), size: 26, font: fonts.body, color: st.muted, anim: 'fade' });
+  } else if (scene.kind === 'bars') {
+    const n = scene.items.length;
+    const fmt = v => `${scene.prefix}${new Intl.NumberFormat(scene.locale, { minimumFractionDigits: scene.decimals, maximumFractionDigits: scene.decimals }).format(v)}${scene.suffix}`;
+    const scale = (scene.max ?? Math.max(...scene.items.map(x => x.value))) || 1;
+    const tsize = scene.title ? fit([scene.title], portrait ? 86 : 72, width * 0.94) : 0;
+    const titleH = scene.title ? tsize * 1.5 : 0, noteH = scene.sourceNote ? 50 : 0;
+    const rowH = Math.min(portrait ? 190 : 150, (bottom - top - titleH - noteH - 40) / n);
+    const longest = Math.max(...scene.items.map(x => x.label.length)) + Math.max(...scene.items.map(x => fmt(x.value).length)) + 2;
+    const fs = Math.max(18, Math.min(portrait ? 52 : 44, Math.floor(rowH * 0.3), Math.floor(width / (longest * 0.6))));
+    const barH = Math.max(14, Math.round(rowH * 0.36));
+    let y = top + (bottom - top - noteH - titleH - n * rowH) / 2;
+    if (scene.title) { A.text({ t0: at(sc.title), t1: end, x: cx, y: y + titleH / 2, text: accentText(scene.title, st.ink, st.accent2), size: tsize, font: fonts.display, color: st.ink, glow: 0.3 }); y += titleH; }
+    scene.items.forEach((item, i) => {
+      const [b0, b1] = sc.bars[i], on = scene.highlight === undefined || scene.highlight === i;
+      const bw = Math.round(width * item.value / scale);
+      A.text({ t0: at(b0), t1: end, x: left, y: y + fs * 0.6, align: 4, text: esc(item.label), size: fs, font: fonts.body, color: on ? st.ink : st.muted, anim: 'rise', layer: 3 });
+      A.shape({ t0: at(b0), t1: end, d: roundRect(bw, barH, Math.min(barH / 2, bw / 2)), x: left, y: y + fs * 1.4, color: on ? st.accent : st.muted, alpha: on ? 0 : 0.45, layer: 2, anim: 'grow', grow: (b1 - b0) * beat });
+      A.text({ t0: at(b1), t1: end, x: right, y: y + fs * 0.6, align: 6, text: esc(fmt(item.value)), size: fs, font: fonts.display, color: on ? st.ink : st.muted, anim: 'pop', layer: 3 });
+      y += rowH;
+    });
+    if (scene.sourceNote) A.text({ t0: at(sc.note), t1: end, x: cx, y: bottom - 30, text: esc(scene.sourceNote), size: 26, font: fonts.body, color: st.muted, anim: 'fade' });
   } else if (scene.kind === 'terminal') {
     const lines = [scene.command, ...scene.output];
     const fs = Math.min(portrait ? 40 : 34, Math.floor((width * 0.86) / (Math.max(...lines.map(l => l.length)) + 2) / 0.6));
@@ -567,6 +629,7 @@ export const STORY_GUIDE = {
   scenes: {
     title: '{kind:"title", beats, lines:["Any game.", "Any *binary*."], sub?, stagger? (beats between lines, default 1 or less), align?:"center"|"left", size?} — lines slam in on their beats; *stars* = accent colour. Events: <id>.in, <id>.l1…, <id>.sub, <id>.out.',
     counter: '{kind:"counter", beats, to, from?:0, prefix?, suffix?, decimals?, title?, label?, sub?, sourceNote?, countBeats?} — counts up with an ease-out. Events: <id>.done. Only real numbers; put the source in sourceNote.',
+    bars: '{kind:"bars", beats, items:[{label, value}] (1–8, label at most 24 characters), title?, prefix?, suffix?, decimals?, locale?, max? (default: the largest value), highlight? (item index from 0; that bar uses the accent colour), sourceNote?} — horizontal bars grow in one after another and each value appears when its bar is full. Events: <id>.done (last bar full). Only real numbers; put the source in sourceNote.',
     terminal: '{kind:"terminal", beats, command, output:[lines], title?, window?, note?} — the command types out, output lines appear one by one; JSON-looking output is coloured. Events: <id>.out.',
     chips: '{kind:"chips", beats, title? ("Works with\\n*your agent.*"), items:[…≤12], footer?, footerBeat?} — items pop in on a fast stagger. Events: <id>.all.',
     'card/end': '{kind:"card/end", beats, title, tagline? (\\n for lines), cta? (shown as "$ cta"), url?, logo? (absolute PNG)} — end card. Events: <id>.cta.',
