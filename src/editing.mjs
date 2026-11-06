@@ -32,6 +32,13 @@ export function socialFormat(shape, size = '1080') {
   const suffix = { '720': '720', '1080': '', '1440': '1440', '4k': shape === 'vertical' ? '4k' : '1440' }[size] ?? '';
   return `${shape}${suffix}`;
 }
+/** Preview shape (a key of PREVIEW_SIZES) for any export format id. */
+export function previewShape(format) {
+  if (/^square/.test(format)) return 'square';
+  if (/^portrait/.test(format)) return 'portrait';
+  if (/^vertical/.test(format)) return 'vertical';
+  return 'landscape';
+}
 export const MAX_EXPORT_FORMATS = 12;
 export const DEFAULT_EXPORT_FORMATS = Object.freeze(['landscape', 'vertical', 'whatsapp']);
 

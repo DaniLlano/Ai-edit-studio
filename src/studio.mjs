@@ -11,7 +11,7 @@ import { renderTrailer, renderStems, ensureSfxLibrary, filterPath, PREVIEW_SIZES
 import { quietRanges, BUILTIN_LUTS, cubeText, validateCube, autoTarget, colorCorrection, averageStats, musicFitPlan, SFX, autoSfx, normalizeSfx, audioRepairAdvice, normalizeAudioRepair, levelMatch, emphasisTimes, autoBrollPlan } from './polish.mjs';
 import { runProcess } from './process.mjs';
 import { proposeSilenceCuts } from './silence.mjs';
-import { normalizeOptions, validateClips, proposeEdit, EXPORT_PRESETS, DEFAULT_EXPORT_FORMATS, MAX_EXPORT_FORMATS, validateCaptionSources, validateOverlaySources } from './editing.mjs';
+import { normalizeOptions, validateClips, proposeEdit, EXPORT_PRESETS, DEFAULT_EXPORT_FORMATS, MAX_EXPORT_FORMATS, validateCaptionSources, validateOverlaySources, previewShape } from './editing.mjs';
 import { applyOperations, coreClips, diffEdits, EditError, LIMITS, layout } from '../public/edit-ops.js';
 import { analyzeMusicFile, timelineBeats } from './beats.mjs';
 import { reviewEdit, describeTimeline, curvesFor, highlights as findHighlights, hookScore } from '../public/insights.js';
@@ -1087,8 +1087,7 @@ export async function autoEditProject(id, request = {}) {
     await persist(project);
     if (request.render || request.preview) {
       project.status = request.preview ? 'previewing' : 'rendering';
-      const first = EXPORT_PRESETS[formats[0]];
-      const previewFormat = !first?.vertical ? 'landscape' : formats[0] === 'square' ? 'square' : formats[0] === 'portrait' ? 'portrait' : 'vertical';
+      const previewFormat = previewShape(formats[0]);
       const outputs = await renderFormats(project, request.preview ? ['preview'] : formats, Boolean(request.preview), previewFormat);
       project.autoEdit.exports = outputs.map(o => ({ id: o.id, format: o.format, output: o.output, duration: o.duration }));
     }
