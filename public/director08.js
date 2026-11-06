@@ -1,5 +1,5 @@
 // Director 0.8 editor features for long edits: outline (sections), search, fit to length, range renders,
-// review notes, script → rough cut, sync + multicam, timeline hand-off (EDL/FCPXML/OTIO/CSV/chapters), proxies.
+// review notes, script → rough cut, sync + multicam, timeline hand-off (EDL/FCPXML/OTIO/CSV/chapters/SRT/VTT), proxies.
 import { t } from './i18n.js';
 import { formatTime, sectionSpans, totalDuration } from './edit-ops.js';
 

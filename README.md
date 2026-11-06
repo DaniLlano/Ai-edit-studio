@@ -1,4 +1,4 @@
-# AI Edit Studio — Director 0.10
+# AI Edit Studio — Director 0.11
 
 A **local-first video editor** for creators, game developers and their agents. One engine with a
 pro timeline for people and the same 59 tools for agents (MCP, HTTP/OpenAPI, CLI). Your footage never

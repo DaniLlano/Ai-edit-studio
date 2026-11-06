@@ -11,7 +11,7 @@ import { runProcess } from './process.mjs';
 import { filterColors } from './render.mjs';
 import { layout, totalDuration } from '../public/edit-ops.js';
 import { curvesFor, clipEnergy } from '../public/insights.js';
-import { mapCaptions, toSrt } from '../public/captions.js';
+import { mapCaptions, toSrt, toVtt } from '../public/captions.js';
 
 export const PUBLISH_PLATFORMS = Object.freeze({
   youtube: { name: 'YouTube', titleMax: 100, descriptionMax: 5000, tags: [] },
@@ -34,7 +34,7 @@ export function chapters(clips, options = {}) {
   rows = rows.filter(r => r.time < total - 10).sort((a, b) => a.time - b.time);
   const out = [];
   for (const r of rows) if (!out.length || r.time - out.at(-1).time >= 10) out.push(r);
-  if (out.length && out[0].time > 0.5) out.unshift({ time: 0, title: 'Intro' }); else if (out.length) out[0].time = 0;
+  if (out.length && out[0].time >= 10) out.unshift({ time: 0, title: 'Intro' }); else if (out.length) out[0].time = 0;
   return out.length >= 3 ? out.map(r => ({ time: Math.round(r.time), title: r.title, line: `${fmt(r.time)} ${r.title}` })) : [];
 }
 
@@ -165,7 +165,7 @@ export async function buildPublishPack(project, dir, request = {}, { brand = nul
   const cues = mapCaptions(project.options.captions ?? [], project.plan.clips, Number(project.options.captionOffset) || 0);
   if (cues.length) {
     const srt = path.join(dir, 'captions.srt'); await fs.writeFile(srt, toSrt(cues), 'utf8'); files.push({ kind: 'captions', file: srt });
-    const vtt = path.join(dir, 'captions.vtt'); await fs.writeFile(vtt, `WEBVTT\n\n${toSrt(cues).replace(/(\d\d:\d\d:\d\d),(\d\d\d)/g, '$1.$2')}`, 'utf8'); files.push({ kind: 'captions', file: vtt });
+    const vtt = path.join(dir, 'captions.vtt'); await fs.writeFile(vtt, toVtt(cues), 'utf8'); files.push({ kind: 'captions', file: vtt });
   }
   const chapterList = chapters(project.plan.clips, project.options);
   const tags = [...(brand?.hashtags ?? []), ...hashtags(title, project.options.brief ?? '')].slice(0, 6);

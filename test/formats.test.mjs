@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeOptions, validateClips, EXPORT_PRESETS, MASTER_FORMATS, SOCIAL_SIZES, socialFormat } from '../src/editing.mjs';
+import { normalizeOptions, validateClips, EXPORT_PRESETS, MASTER_FORMATS, SOCIAL_SIZES, socialFormat, previewShape } from '../src/editing.mjs';
 import { normalizeFinish } from '../src/finishing.mjs';
-import { buildFilter } from '../src/render.mjs';
+import { buildFilter, PREVIEW_SIZES } from '../src/render.mjs';
 import { agentTools } from '../src/agent-tools.mjs';
 
 const source = { file: 'test.mp4', duration: 60, hasAudio: true, black: [], audio: [], video: { width: 1920, height: 1080 }, motion: [], scenes: [] };
@@ -52,4 +52,17 @@ test('agents see every format in the render schema', () => {
   const items = render.inputSchema.properties.formats.items.enum;
   for (const id of [...Object.keys(EXPORT_PRESETS), 'stems']) assert.ok(items.includes(id), id);
   assert.ok(render.inputSchema.properties.formats.maxItems >= Object.keys(EXPORT_PRESETS).length - 3);
+});
+
+test('every export format gets a preview of the same shape', () => {
+  assert.equal(previewShape('square720'), 'square');
+  assert.equal(previewShape('portrait1440'), 'portrait');
+  for (const [id, p] of Object.entries(EXPORT_PRESETS)) {
+    const [w, h] = p.resolution.split('x').map(Number);
+    const shape = previewShape(id);
+    assert.ok(Object.hasOwn(PREVIEW_SIZES, shape), `${id} maps to a preview shape`);
+    const [pw, ph] = PREVIEW_SIZES[shape].split('x').map(Number);
+    assert.equal(Math.sign(pw - ph), Math.sign(w - h), `${id} preview has the same orientation`);
+    if (/^(square|portrait|vertical)/.test(id)) assert.equal(pw * h, ph * w, `${id} preview has the same aspect ratio`);
+  }
 });

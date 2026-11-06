@@ -101,3 +101,4 @@ function srtTime(value) {
   return `${String(Math.floor(ms / 3600000)).padStart(2, '0')}:${String(Math.floor(ms / 60000) % 60).padStart(2, '0')}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')},${String(ms % 1000).padStart(3, '0')}`;
 }
 export function toSrt(rows) { return rows.map((c, i) => `${i + 1}\n${srtTime(c.start)} --> ${srtTime(c.end)}\n${c.text}\n`).join('\n'); }
+export function toVtt(rows) { return `WEBVTT\n\n${toSrt(rows).replace(/(\d{2,}:\d{2}:\d{2}),(\d{3})/g, '$1.$2')}`; }

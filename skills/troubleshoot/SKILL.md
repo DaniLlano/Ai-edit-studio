@@ -23,6 +23,10 @@ Start every diagnosis with `studio_doctor` (FFmpeg/ffprobe, encoder, data root, 
 | `DATA_ROOT_UNAVAILABLE` | Data folder cannot be created | Set `AI_EDIT_STUDIO_DATA_ROOT` (plugin) or `GAME_TRAILER_STUDIO_DATA_ROOT` to a writable folder. Defaults: `Documents\AI Edit Studio` (Windows), `~/.ai-edit-studio` (plugin on macOS/Linux). |
 | `INSUFFICIENT_FREE_SPACE` | Disk too full for the render | Free space; `studio_proxies {action:"remove"}`; delete old exports by hand (no delete tool). |
 | `RENDER_FAILED` | FFmpeg stopped | `studio_doctor`; retry once with `queue:true`; then `studio_render_range` on the failing part to isolate the shot; report the message. |
+| `HDR_NOT_SUPPORTED` | Source uses HDR10 (`smpte2084`) or HLG (`arib-std-b67`), which this beta does not tone-map | Ask the user to re-export or convert the video to SDR before creating the project. |
+| `SOURCE_CHANGED` | A source was moved, removed or modified after project creation | Restore the original unchanged file at its original path, or create a new project with the current file; existing exports are kept. |
+| `MEDIA_TOO_LONG` | Source exceeds the 2-hour limit | Ask the user to trim or split it into files no longer than 2 hours, then create a new project. |
+| `ENCODER_MISSING` | FFmpeg has neither working NVIDIA NVENC H.264 nor `libx264` | Install an FFmpeg build with `libx264`, or fix the NVIDIA driver/GPU setup for NVENC; then run `node cli.mjs doctor`. |
 | `SERVER_START_FAILED` | Daemon did not start | Port taken → `GAME_TRAILER_STUDIO_PORT`; check `logs/` in the data root; `node server.mjs` shows the error. |
 | `CAPTIONS_UNAVAILABLE` / `DEPENDENCY_MISSING` | FFmpeg missing or without text rendering | Tell the user the fix in the message (macOS: `brew install ffmpeg-full`; Windows: `winget install Gyan.FFmpeg`), then rerun the installer to check. |
 | `MUSIC_NOT_FOUND` / `INVALID_AUDIO` | Music path invalid | Absolute path to wav/mp3/m4a/flac, or `studio_music {action:"compose"}`. |

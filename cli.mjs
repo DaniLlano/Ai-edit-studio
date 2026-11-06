@@ -27,7 +27,7 @@ function apiRoot() {
   return `http://127.0.0.1:${serverPort()}/api`;
 }
 
-function parseArguments(values) {
+export function parseArguments(values) {
   const positional = [];
   const flags = {};
   for (let index = 0; index < values.length; index += 1) {
@@ -36,7 +36,10 @@ function parseArguments(values) {
       positional.push(value);
       continue;
     }
-    const [rawKey, inline] = value.slice(2).split('=', 2);
+    const body = value.slice(2);
+    const equals = body.indexOf('=');
+    const rawKey = equals === -1 ? body : body.slice(0, equals);
+    const inline = equals === -1 ? undefined : body.slice(equals + 1);
     if (rawKey.startsWith('no-')) {
       flags[rawKey.slice(3)] = false;
     } else if (inline !== undefined) {

@@ -155,6 +155,19 @@ test('timeline export: EDL, CSV, chapters, FCPXML and OTIO are well formed', () 
   const sources = [src(40, { name: 'cam & co', file: 'C:\\media\\cam a.mp4', video: { width: 1920, height: 1080 } }), src(40)];
   const clips = [{ id: 'a', sourceIndex: 0, start: 1, end: 5, label: 'Hello' }, { id: 'b', sourceIndex: 1, start: 10, end: 13, speed: 1.5 }, { id: 'c', sourceIndex: 0, start: 20, end: 24, transition: 'fade', transitionSeconds: 0.5 }];
   const options = { sections: [{ name: 'Part B', clip: 'b' }], markers: [{ time: 1, label: 'm' }], narration: '/v/voice.wav', narrationTrimStart: 2 };
+  const captionOptions = { ...options, captionOffset: 0.5, captions: [
+    { sourceIndex: 0, start: 1, end: 3, text: 'Opening' },
+    { sourceIndex: 1, start: 10, end: 13, text: 'Speed' },
+    { sourceIndex: 0, start: 20, end: 23.5, text: 'Finale' },
+  ] };
+  const srt = exportTimeline({ format: 'srt', clips, sources, options: captionOptions });
+  assert.equal(srt.extension, 'srt'); assert.equal(srt.mime, 'application/x-subrip');
+  assert.equal(srt.content, '1\n00:00:00,500 --> 00:00:02,500\nOpening\n\n2\n00:00:04,333 --> 00:00:06,000\nSpeed\n\n3\n00:00:06,000 --> 00:00:09,500\nFinale\n');
+  const vtt = exportTimeline({ format: 'vtt', clips, sources, options: captionOptions });
+  assert.equal(vtt.extension, 'vtt'); assert.equal(vtt.mime, 'text/vtt');
+  assert.equal(vtt.content, 'WEBVTT\n\n1\n00:00:00.500 --> 00:00:02.500\nOpening\n\n2\n00:00:04.333 --> 00:00:06.000\nSpeed\n\n3\n00:00:06.000 --> 00:00:09.500\nFinale\n');
+  assert.throws(() => exportTimeline({ format: 'srt', clips, sources, options }), /No captions are available/);
+  assert.throws(() => exportTimeline({ format: 'vtt', clips, sources, options }), /No captions are available/);
   assert.equal(timecode(3661.5, 30), '01:01:01:15');
   const edl = exportTimeline({ format: 'edl', clips, sources, options, name: 'Ünï', fps: 30 }).content;
   assert.equal(edl.split('\r\n').filter(l => /^\d{3} /.test(l)).length, 3);
@@ -166,10 +179,44 @@ test('timeline export: EDL, CSV, chapters, FCPXML and OTIO are well formed', () 
   assert.match(fcp, /<project name="A &amp; B">/); assert.match(fcp, /file:\/\/\/C:\/media\/cam%20a\.mp4/); assert.match(fcp, /lane="-1" name="Voice"/);
   assert.equal((fcp.match(/<asset-clip ref="a/g) ?? []).length, 3);
   const otio = JSON.parse(exportTimeline({ format: 'otio', clips, sources, options }).content);
-  assert.equal(otio.tracks.children[0].children.length, 3); assert.equal(otio.tracks.children[1].kind, 'Audio');
+  assert.equal(otio.tracks.children[0].children.filter(i => i.OTIO_SCHEMA === 'Clip.2').length, 3); assert.equal(otio.tracks.children[1].kind, 'Audio');
   const rb = layout(clips)[1];
   assert.equal(otio.tracks.children[0].children[1].source_range.duration.value, Math.round((rb.visibleEnd - rb.visibleStart) * 1.5 * 30), 'speed changes map to source frames');
   assert.throws(() => exportTimeline({ format: 'aaf', clips, sources }), /format/);
+});
+
+test('timeline export: OTIO carries transitions as Transition.1 items between the clips', () => {
+  const sources = [src(40), src(40)];
+  const items = (clips, fps = 30) => JSON.parse(exportTimeline({ format: 'otio', clips, sources, options: {}, fps }).content).tracks.children[0].children;
+  const kinds = list => list.map(i => i.OTIO_SCHEMA);
+  const a = { id: 'a', sourceIndex: 0, start: 1, end: 5 }, b = { id: 'b', sourceIndex: 1, start: 10, end: 13 };
+  const withC = (transition, transitionSeconds) => ({ id: 'c', sourceIndex: 0, start: 20, end: 24, transition, transitionSeconds });
+
+  const fade = items([a, b, withC('fade', 0.4)]);
+  assert.deepEqual(kinds(fade), ['Clip.2', 'Clip.2', 'Transition.1', 'Clip.2']);
+  assert.equal(fade[2].transition_type, 'SMPTE_Dissolve');
+  assert.equal(fade[2].in_offset.value, 6); assert.equal(fade[2].out_offset.value, 6); assert.equal(fade[2].in_offset.rate, 30);
+
+  const wipe = items([a, b, withC('wipeleft', 0.4)])[2];
+  assert.equal(wipe.transition_type, 'Custom_Transition');
+  assert.equal(wipe.name, 'wipeleft'); assert.equal(wipe.metadata.aiEditStudio.transition, 'wipeleft');
+
+  assert.deepEqual(kinds(items([a, b])), ['Clip.2', 'Clip.2'], 'cuts add no transitions');
+
+  const odd = items([a, b, withC('fade', 0.5)])[2];
+  assert.ok(Number.isInteger(odd.in_offset.value) && Number.isInteger(odd.out_offset.value), 'offsets are whole frames');
+
+  // A clip squeezed between two transitions at the 0.5x limit: its two offsets use up all of its frames, never more.
+  const clips = [{ id: 'a', sourceIndex: 0, start: 0, end: 4 }, { id: 'b', sourceIndex: 0, start: 10, end: 11.2, transition: 'fade', transitionSeconds: 5 }, withC('fade', 5)];
+  const squeezed = items(clips);
+  assert.deepEqual(kinds(squeezed), ['Clip.2', 'Transition.1', 'Clip.2', 'Transition.1', 'Clip.2']);
+  squeezed.forEach((item, i) => {
+    if (item.OTIO_SCHEMA !== 'Clip.2') return;
+    const used = (squeezed[i - 1]?.out_offset?.value ?? 0) + (squeezed[i + 1]?.in_offset?.value ?? 0);
+    assert.ok(used <= item.source_range.duration.value, `the transitions around clip ${i} fit inside it`);
+  });
+  const total = squeezed.filter(i => i.OTIO_SCHEMA === 'Clip.2').reduce((sum, i) => sum + i.source_range.duration.value, 0);
+  assert.equal(total, Math.round(totalDuration(clips) * 30), 'the track is as long as the edit');
 });
 
 test('0.8 tools: 46 tools, schemas validate, version gate, routes', async () => {
@@ -183,6 +230,8 @@ test('0.8 tools: 46 tools, schemas validate, version gate, routes', async () => 
   validateArguments({ projectId: id, revision: 1, script: 'a b\nc d' }, schema('assemble'));
   validateArguments({ projectId: id, revision: 1, cameras: [0, 1], audioSource: 0 }, schema('multicam'));
   validateArguments({ projectId: id, format: 'otio', fps: 25 }, schema('export_timeline'));
+  validateArguments({ projectId: id, format: 'srt' }, schema('export_timeline'));
+  validateArguments({ projectId: id, format: 'vtt' }, schema('export_timeline'));
   validateArguments({ projectId: id, action: 'resolve', id: 'abcdef12', reply: 'ok' }, schema('comments'));
   validateArguments({ projectId: id, action: 'make', height: 540 }, schema('proxies'));
   validateArguments({ projectId: id, revision: 3, operations: [{ op: 'move_block', clips: ['a', 'b'], before: null }] }, schema('edit'));

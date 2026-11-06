@@ -25,9 +25,9 @@ plain `ffmpeg` formula cannot draw text or captions.
 
 | App | What you get |
 | --- | --- |
-| Claude Code | plugin: 57 tools, 6 workflow skills (`/ai-edit-studio:viral-short` …), `video-director` agent |
-| OpenAI Codex (app, CLI, IDE) | the 57 tools (MCP) and the same 6 skills |
-| Claude Desktop, Cursor | the 57 tools (MCP) |
+| Claude Code | plugin: 59 tools, 6 workflow skills (`/ai-edit-studio:viral-short` …), `video-director` agent |
+| OpenAI Codex (app, CLI, IDE) | the 59 tools (MCP) and the same 6 skills |
+| Claude Desktop, Cursor | the 59 tools (MCP) |
 | OpenAI API / Agents SDK | nothing to install — `examples/openai/` with your own `OPENAI_API_KEY` |
 
 Apps installed later? Run the installer again — it is safe to repeat, also for upgrades (unzip the new version, run its

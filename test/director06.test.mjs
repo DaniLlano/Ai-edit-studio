@@ -177,6 +177,16 @@ test('brand colours stay numeric in filters', () => {
   assert.match(graph, /colorchannelmixer=aa=0\.500/); assert.match(graph, /overlay=x=W-w-W\*0\.04:y=H-h-H\*0\.05/);
 });
 
+test('publish: a first chapter before 10 s moves to 0:00 instead of getting an Intro', () => {
+  const clips = [{ sourceIndex: 0, start: 0, end: 120 }];
+  const early = chapters(clips, { markers: [{ time: 4, label: 'Setup' }, { time: 20, label: 'Fight' }, { time: 40, label: 'Boss' }] });
+  assert.deepEqual(early.map(c => c.line), ['00:00 Setup', '00:20 Fight', '00:40 Boss']);
+  assert.ok(early.every((c, i) => i === 0 || c.time - early[i - 1].time >= 10));
+  const late = chapters(clips, { markers: [{ time: 12, label: 'Setup' }, { time: 30, label: 'Fight' }, { time: 50, label: 'Boss' }] });
+  assert.deepEqual(late.map(c => c.line), ['00:00 Intro', '00:12 Setup', '00:30 Fight', '00:50 Boss']);
+  assert.ok(late.every((c, i) => i === 0 || c.time - late[i - 1].time >= 10));
+});
+
 test('Director 0.6 agent tools validate and route', async () => {
   const names = agentTools.map(t => t.name);
   for (const n of ['studio_auto_edit', 'studio_transcribe', 'studio_transcript', 'studio_text_edit', 'studio_reframe', 'studio_publish_pack', 'studio_brand']) assert.ok(names.includes(n), n);

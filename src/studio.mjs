@@ -11,7 +11,7 @@ import { renderTrailer, renderStems, ensureSfxLibrary, filterPath, PREVIEW_SIZES
 import { quietRanges, BUILTIN_LUTS, cubeText, validateCube, autoTarget, colorCorrection, averageStats, musicFitPlan, SFX, autoSfx, normalizeSfx, audioRepairAdvice, normalizeAudioRepair, levelMatch, emphasisTimes, autoBrollPlan } from './polish.mjs';
 import { runProcess } from './process.mjs';
 import { proposeSilenceCuts } from './silence.mjs';
-import { normalizeOptions, validateClips, proposeEdit, EXPORT_PRESETS, DEFAULT_EXPORT_FORMATS, MAX_EXPORT_FORMATS, validateCaptionSources, validateOverlaySources } from './editing.mjs';
+import { normalizeOptions, validateClips, proposeEdit, EXPORT_PRESETS, DEFAULT_EXPORT_FORMATS, MAX_EXPORT_FORMATS, validateCaptionSources, validateOverlaySources, previewShape } from './editing.mjs';
 import { applyOperations, coreClips, diffEdits, EditError, LIMITS, layout } from '../public/edit-ops.js';
 import { analyzeMusicFile, timelineBeats } from './beats.mjs';
 import { reviewEdit, describeTimeline, curvesFor, highlights as findHighlights, hookScore } from '../public/insights.js';
@@ -1087,8 +1087,7 @@ export async function autoEditProject(id, request = {}) {
     await persist(project);
     if (request.render || request.preview) {
       project.status = request.preview ? 'previewing' : 'rendering';
-      const first = EXPORT_PRESETS[formats[0]];
-      const previewFormat = !first?.vertical ? 'landscape' : formats[0] === 'square' ? 'square' : formats[0] === 'portrait' ? 'portrait' : 'vertical';
+      const previewFormat = previewShape(formats[0]);
       const outputs = await renderFormats(project, request.preview ? ['preview'] : formats, Boolean(request.preview), previewFormat);
       project.autoEdit.exports = outputs.map(o => ({ id: o.id, format: o.format, output: o.output, duration: o.duration }));
     }
@@ -1446,7 +1445,7 @@ export async function exportTimelineProject(id, request = {}) {
   const file = path.join(dir, `${project.name.replace(/[^\p{L}\p{N} _-]/gu, '').trim().slice(0, 40) || 'edit'} rev${project.revision}.${out.extension}`);
   await fs.writeFile(file, out.content, 'utf8');
   return { format: request.format ?? 'edl', fps, file, mime: out.mime, bytes: Buffer.byteLength(out.content), content: out.content.length > 200_000 ? `${out.content.slice(0, 200_000)}\n…` : out.content,
-    note: { edl: 'CMX3600 for Premiere, Resolve and Avid (cuts, speed via M2; transitions as comments).', fcpxml: 'FCPXML 1.9 for Final Cut Pro and DaVinci Resolve.', otio: 'OpenTimelineIO for Resolve, Premiere (via plugin) and pipelines.', csv: 'Shot list for spreadsheets.', chapters: 'YouTube chapters from sections or labelled markers.' }[request.format ?? 'edl'] };
+    note: { edl: 'CMX3600 for Premiere, Resolve and Avid (cuts, speed via M2; transitions as comments).', fcpxml: 'FCPXML 1.9 for Final Cut Pro and DaVinci Resolve.', otio: 'OpenTimelineIO for Resolve, Premiere (via plugin) and pipelines (cuts, speed and transitions).', srt: 'Timeline-timed SubRip captions mapped through cuts and clip speed, including caption offset.', vtt: 'Timeline-timed WebVTT captions mapped through cuts and clip speed, including caption offset.', csv: 'Shot list for spreadsheets.', chapters: 'YouTube chapters from sections or labelled markers.' }[request.format ?? 'edl'] };
 }
 
 /** Review notes pinned to the edit (anchored to a shot so they move with it). Not part of the edit history. */

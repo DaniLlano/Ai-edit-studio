@@ -60,3 +60,25 @@ test('skills, agent and docs only mention tools, recipes, templates and platform
     for (const [, id] of text.matchAll(/platform:"([a-z]+)"/g)) assert.ok(platforms.has(id), `${file}: unknown platform ${id}`);
   }
 });
+
+async function sourceCodeFiles(dir) {
+  const entries = await fs.readdir(path.join(ROOT, dir), { withFileTypes: true });
+  const nested = await Promise.all(entries.map(async entry => {
+    const rel = path.join(dir, entry.name);
+    if (entry.isDirectory()) return sourceCodeFiles(rel);
+    return /\.(?:mjs|js)$/.test(entry.name) ? [rel] : [];
+  }));
+  return nested.flat();
+}
+
+test('troubleshooting error codes exist in the implementation', async () => {
+  const docs = await Promise.all(['TROUBLESHOOTING.md', 'skills/troubleshoot/SKILL.md'].map(read));
+  const codes = new Set(docs.flatMap(text => [...text.matchAll(/`([A-Z][A-Z0-9_]+)`/g)].map(([, code]) => code)));
+  const files = [
+    ...(await sourceCodeFiles('src')),
+    ...(await sourceCodeFiles('plugin')),
+    'server.mjs', 'cli.mjs', 'mcp.mjs',
+  ];
+  const implementation = (await Promise.all(files.map(read))).join('\n');
+  for (const code of codes) assert.ok(implementation.includes(code), `troubleshooting code has no implementation: ${code}`);
+});

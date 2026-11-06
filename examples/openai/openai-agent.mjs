@@ -1,6 +1,6 @@
 // AI Edit Studio driven by an OpenAI model through the Responses API — no dependencies, Node 20+.
 //   OPENAI_API_KEY=… node examples/openai/openai-agent.mjs [--skill viral-short] [--model gpt-5] "Make a TikTok from D:\clips\a.mp4 …"
-// The model sees the same 57 tools as MCP/HTTP/CLI; calls run in the local engine (started when needed).
+// The model sees the same 59 tools as MCP/HTTP/CLI; calls run in the local engine (started when needed).
 // Only the prompt, tool results and storyboard/frame JPEGs go to OpenAI; your video files never do.
 import fs from 'node:fs/promises';
 import path from 'node:path';

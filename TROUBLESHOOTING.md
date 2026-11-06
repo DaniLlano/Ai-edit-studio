@@ -30,6 +30,10 @@ folder and the optional speech engine.
 | Problem | Fix |
 | --- | --- |
 | `ENGINE_BUSY` | One analysis/render at a time. Use `queue:true` or wait. |
+| `HDR_NOT_SUPPORTED` | The source uses HDR10 (`smpte2084`) or HLG (`arib-std-b67`), which this beta does not tone-map. Re-export or convert the video to SDR before adding it to a project. |
+| `SOURCE_CHANGED` | A source file was moved, removed, or changed after the project was created. Restore the original file unchanged at its original path, or create a new project with the current file; existing exports are kept. |
+| `MEDIA_TOO_LONG` | A source is longer than the 2-hour limit. Trim it or split it into shorter files, each no longer than 2 hours, then create a project with those files. |
+| `ENCODER_MISSING` | FFmpeg has neither a working NVIDIA NVENC H.264 encoder nor `libx264`. Install an FFmpeg build with `libx264` enabled (or fix the NVIDIA driver/GPU setup for NVENC), then run `node cli.mjs doctor`. |
 | `RENDER_FAILED` | `doctor`; render the failing part only (`studio_render_range`) to find the shot; check the source plays. |
 | Too quiet/loud after upload | Check `studio_qc`: −14 LUFS and true peak ≤ −1 dBTP. Set `loudnessTarget`, re-render. |
 | Vertical crop loses the subject | Reframe follows motion, not faces: set the focus point per shot, or use fit (blurred background). |

@@ -1,9 +1,9 @@
 // Long-form editing helpers (pure): fit an edit to a length, search a project, build a rough cut
-// from a script, plan a multicam edit, and export the timeline for other NLEs (EDL, FCPXML, OTIO, CSV).
+// from a script, plan a multicam edit, and export EDL/FCPXML/OTIO/CSV/chapters/SRT/VTT.
 import { layout, totalDuration, mergeRanges, sectionSpans, applyOperations, LIMITS } from '../public/edit-ops.js';
 import { curvesFor, clipEnergy, highlights } from '../public/insights.js';
 import { findFillers, findPauses, wordsInEdit, bare } from '../public/transcript.js';
-import { mapCaptions } from '../public/captions.js';
+import { mapCaptions, toSrt, toVtt } from '../public/captions.js';
 import { sentences } from './clips.mjs';
 
 const STEP = 0.5;
@@ -270,6 +270,13 @@ export function chapterMetadata(chapters) {
 }
 export function exportTimeline({ format, clips, sources, options = {}, name = 'Edit', fps = 30 }) {
   const rows = layout(clips), sections = sectionSpans(clips, options.sections ?? []);
+  if (format === 'srt' || format === 'vtt') {
+    const cues = mapCaptions(options.captions ?? [], clips, Number(options.captionOffset) || 0);
+    if (!cues.length) throw new Error('No captions are available for this edit. Add or import captions before exporting SRT or VTT.');
+    return format === 'srt'
+      ? { extension: 'srt', mime: 'application/x-subrip', content: toSrt(cues) }
+      : { extension: 'vtt', mime: 'text/vtt', content: toVtt(cues) };
+  }
   if (format === 'edl') {
     const lines = [`TITLE: ${name.replace(/[^\x20-\x7e]/g, '').slice(0, 60) || 'EDIT'}`, 'FCM: NON-DROP FRAME', ''];
     rows.forEach((r, i) => {
@@ -347,12 +354,28 @@ ${markers}
   if (format === 'otio') {
     const rt = s => ({ OTIO_SCHEMA: 'RationalTime.1', rate: fps, value: frames(s) });
     const tr = (a, d) => ({ OTIO_SCHEMA: 'TimeRange.1', start_time: rt(a), duration: rt(d) });
-    const children = rows.map(r => ({
+    const clipItems = rows.map(r => ({
       OTIO_SCHEMA: 'Clip.2', name: r.label || sources[r.sourceIndex]?.name || 'clip', metadata: { aiEditStudio: { id: r.id, speed: r.speed ?? 1, transition: r.transition ?? 'cut' } },
       source_range: tr(r.start + (r.visibleStart - r.timelineStart) * (r.speed || 1), (r.visibleEnd - r.visibleStart) * (r.speed || 1)),
       media_references: { DEFAULT_MEDIA: { OTIO_SCHEMA: 'ExternalReference.1', target_url: fileUrl(sources[r.sourceIndex]?.file ?? ''), available_range: tr(0, sources[r.sourceIndex]?.duration ?? 0) } },
       active_media_reference_key: 'DEFAULT_MEDIA', effects: [], markers: [], enabled: true,
     }));
+    // A transition sits between two clips and takes no track time: each side uses half the overlap, in whole frames.
+    const rtFrames = value => ({ OTIO_SCHEMA: 'RationalTime.1', rate: fps, value });
+    const children = [];
+    let headUsed = 0; // frames the transition before the previous clip already takes from that clip
+    rows.forEach((r, i) => {
+      const half = Math.round(r.overlapIn / 2 * fps);
+      const inFrames = i > 0 ? Math.min(half, Math.max(0, clipItems[i - 1].source_range.duration.value - headUsed)) : 0;
+      const outFrames = Math.min(half, clipItems[i].source_range.duration.value);
+      const cut = i > 0 && inFrames + outFrames > 0;
+      if (cut) children.push({
+        OTIO_SCHEMA: 'Transition.1', name: r.transition, transition_type: r.transition === 'fade' ? 'SMPTE_Dissolve' : 'Custom_Transition',
+        in_offset: rtFrames(inFrames), out_offset: rtFrames(outFrames), metadata: { aiEditStudio: { transition: r.transition, seconds: r.overlapIn } },
+      });
+      headUsed = cut ? outFrames : 0;
+      children.push(clipItems[i]);
+    });
     const doc = { OTIO_SCHEMA: 'Timeline.1', name, global_start_time: rt(0), metadata: {},
       tracks: { OTIO_SCHEMA: 'Stack.1', name: 'tracks', children: [{ OTIO_SCHEMA: 'Track.1', name: 'V1', kind: 'Video', children, markers: (options.markers ?? []).map(m => ({ OTIO_SCHEMA: 'Marker.2', name: m.label ?? '', marked_range: tr(m.time, 0), color: (m.color ?? 'yellow').toUpperCase() })) },
         ...extra.map((x, k) => ({ OTIO_SCHEMA: 'Track.1', name: `A${k + 1} ${x.name}`, kind: 'Audio', markers: [], children: [
@@ -360,6 +383,6 @@ ${markers}
           { OTIO_SCHEMA: 'Clip.2', name: x.name, source_range: tr(x.trim, x.duration), media_references: { DEFAULT_MEDIA: { OTIO_SCHEMA: 'ExternalReference.1', target_url: fileUrl(x.file), available_range: null } }, active_media_reference_key: 'DEFAULT_MEDIA', effects: [], markers: [], enabled: true }] }))] } };
     return { extension: 'otio', mime: 'application/json', content: JSON.stringify(doc, null, 2) };
   }
-  throw new Error('format: edl, fcpxml, otio, csv or chapters.');
+  throw new Error('format: edl, fcpxml, otio, csv, chapters, srt or vtt.');
 }
 export { r3 };

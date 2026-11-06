@@ -13,7 +13,7 @@ export const LANG = pickLanguage();
 export const LOCALE = LANG === 'nl' ? 'nl-NL' : 'en-GB';
 
 export const NL = {
- "DIRECTOR 0.9": "DIRECTOR 0.9",
+ "DIRECTOR 0.11": "DIRECTOR 0.11",
  "Speed up pauses ×2": "Pauzes ×2 versnellen",
  "Play pauses twice as fast instead of cutting them (without a transcript: the quiet stretches)": "Pauzes twee keer zo snel afspelen in plaats van wegknippen (zonder transcript: de stille stukken)",
  "Pauses sped up": "Pauzes versneld",
@@ -417,7 +417,7 @@ export const NL = {
  "Social size": "Maat social",
  "21:9 ultrawide · 2560×1080": "21:9 ultrabreed · 2560×1080",
  "4K (9:16; 1:1 and 4:5 use 1440)": "4K (9:16; 1:1 en 4:5 worden 1440)",
- "57 tools via MCP, HTTP/OpenAPI and CLI · atomic edits, storyboard & review": "57 tools via MCP, HTTP/OpenAPI en CLI · atomische edits, storyboard & review",
+ "59 tools via MCP, HTTP/OpenAPI and CLI · atomic edits, storyboard & review": "59 tools via MCP, HTTP/OpenAPI en CLI · atomische edits, storyboard & review",
  "30–45 s, widescreen, voice-over friendly": "30–45 s, breedbeeld, voice-over-vriendelijk",
  "30–90 s, long shots, noir or cinema": "30–90 s, lange shots, noir of cinema",
  "45–90 s, honest and clear": "45–90 s, eerlijk en helder",

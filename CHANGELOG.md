@@ -6,11 +6,23 @@
 - **Clearer file errors**: a rejected file now names the path you passed and the check that failed (not a regular file, the extension with the allowed list, or the size against the limit) (#14).
 - **A damaged or non-media file is named**: when ffprobe cannot read a video, still or audio file, the error is `UNSUPPORTED_MEDIA` with the file and ffprobe's reason, instead of "Process exited with code 1" (#19).
 - **Long transcripts import**: `studio_transcript` import and the FFmpeg-whisper path no longer stop at the 300-cue caption limit, and WebVTT files with header lines, cue settings, cue ids, short `mm:ss.ttt` times or `NOTE`/`STYLE` blocks are read correctly (#20).
+- **CLI flag values keep every `=`**: `--title=Score=100` now gives `Score=100` instead of `Score` (#27).
+- **Brand kit ids fold accents**: `Café Noir` becomes `cafe-noir` and `Zoë` becomes `zoe`; kits saved under the old id are still found, and a name without Latin letters or digits says why it is refused (#29).
+- **YouTube chapters stay valid**: a first chapter before 10 s moves to 0:00 instead of getting an "Intro" a few seconds before it (#30).
+- **The right preview shape for every social size**: `square720`, `portrait1440` and the other sizes get a square or 4:5 preview instead of 9:16 (#31).
+- **`speech-setup` checks the model name first**: a typo gives `INVALID_MODEL` with the common names before anything is downloaded, and a failed download no longer leaves a `.partial` file (#32).
+- **Transitions in the OTIO export**: fades become `SMPTE_Dissolve` and other transitions `Custom_Transition` items, in whole frames, so they survive the hand-off to Resolve and other editors (#35).
+- **Agents hear about music and story documents**: the MCP instructions and `studio_schema` now name `studio_music`, `studio_guide {topic:"story"}` and `studio_apply` (#36).
+- **TROUBLESHOOTING entries** for `HDR_NOT_SUPPORTED`, `SOURCE_CHANGED`, `MEDIA_TOO_LONG` and `ENCODER_MISSING`, also in the troubleshoot skill, with a test that every documented error code exists in the code (#37).
+- **Up-to-date tool count and version**: the npm description, INSTALL.md, the OpenAI example, the editor and the launch page say 59 tools and Director 0.11, and a test keeps them in step with the code (#34).
 
 ### Thanks
 
-- @bfs2021 for the generated help (#13) and the long SRT/VTT transcript import (#20).
+- @bfs2021 for the generated help (#13), the long SRT/VTT transcript import (#20) and the `=` flag fix (#27).
 - @wized2 for the clearer file errors (#14) and the named probe failures (#19).
+- @tnalbant for the accent-folding brand kit ids that keep old kits readable (#29).
+- @DaniLlano for the chapter fix (#30), the preview shapes (#31), the safer speech setup (#32), OTIO transitions (#35) and the music and story pointers for agents (#36).
+- @Aaqibhafeezkhan for the troubleshooting entries and their error-code test (#37) and the tool-count and version sync with its docs test (#34).
 
 ## 0.11.0 — story documents
 
