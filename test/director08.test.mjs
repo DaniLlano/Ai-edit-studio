@@ -281,3 +281,14 @@ test('chapters written the way the render does are readable with ffprobe', async
   assert.deepEqual(found.map(c => [Number(c.start_time), Number(c.end_time)]), [[0, 1.5], [1.5, 4]]);
   await fs.rm(dir, { recursive: true, force: true });
 });
+
+test('chapterMarks: marks outside the edit are dropped and every chapter stays inside the programme', () => {
+const clips = [{ id: 'a', sourceIndex: 0, start: 1, end: 5 }, { id: 'b', sourceIndex: 1, start: 10, end: 13, speed: 1.5 }, { id: 'c', sourceIndex: 0, start: 20, end: 24, transition: 'fade', transitionSeconds: 0.5 }];
+const inRange = [{ start: 0, end: 3, title: 'Intro' }, { start: 3, end: 9.5, title: 'Mid' }];
+assert.deepEqual(chapterMarks(clips, { markers: [{ time: 3, label: 'Mid' }, { time: 12, label: 'Late' }] }), inRange);
+assert.deepEqual(chapterMarks(clips, { markers: [{ time: 3, label: 'Mid' }, { time: 9.5, label: 'End' }] }), inRange);
+assert.deepEqual(chapterMarks(clips, { markers: [{ time: 3, label: 'Mid' }, { time: 3, label: 'Again' }] }), inRange);
+assert.deepEqual(chapterMarks([{ id: 'a', sourceIndex: 0, start: 1, end: 5 }], { markers: [{ time: 10, label: 'Late' }] }), []);
+assert.deepEqual(chapterMarks(clips, { markers: [{ time: 3, label: 'Mid' }] }, 2),
+  [{ start: 0, end: 5, title: 'Intro' }, { start: 5, end: 11.5, title: 'Mid' }]);
+});

@@ -254,14 +254,19 @@ export function timecode(seconds, fps) {
 const xml = v => String(v ?? '').replace(/[<>&"']/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[c]));
 const fileUrl = f => `file://${f.startsWith('/') ? '' : '/'}${encodeURI(f.replaceAll('\\', '/'))}`;
 /** Chapters shared by the chapters export and the MP4 render: sections first, else labelled markers.
- * `offset` is the length of a brand intro in front of the programme; the first chapter always starts at 0:00. */
+ * `offset` is the length of a brand intro in front of the programme; the first chapter always starts at 0:00.
+ * Marks at or past the end of the edit are dropped and each time gives one chapter, so 0 <= start < end <= programme end. */
 export function chapterMarks(clips, options = {}, offset = 0) {
   const sections = sectionSpans(clips, options.sections ?? []);
-  const marks = (sections.length ? sections.map(s => ({ t: s.start, n: s.name })) : (options.markers ?? []).filter(m => m.label).map(m => ({ t: m.time, n: m.label }))).sort((a, b) => a.t - b.t);
+  const length = r3(totalDuration(clips));
+  const marks = (sections.length ? sections.map(s => ({ t: s.start, n: s.name })) : (options.markers ?? []).filter(m => m.label).map(m => ({ t: m.time, n: m.label })))
+    .filter(m => r3(m.t) < length)
+    .sort((a, b) => a.t - b.t)
+    .filter((m, i, all) => !i || r3(m.t) > r3(all[i - 1].t));
   if (!marks.length) return [];
   if (marks[0].t >= 1) marks.unshift({ t: 0, n: marks.some(m => m.n.toLowerCase() === 'intro') ? 'Start' : 'Intro' }); else marks[0].t = 0; // YouTube needs the first chapter at 0:00
-  const total = totalDuration(clips) + offset;
-  return marks.map((m, i) => ({ start: i ? r3(m.t + offset) : 0, end: r3(marks[i + 1] ? marks[i + 1].t + offset : total), title: m.n }));
+  const total = length + offset;
+  return marks.map((m, i) => ({ start: i ? r3(m.t + offset) : 0, end: r3(marks[i + 1] ? marks[i + 1].t + offset : total), title: m.n })).filter(c => c.start < c.end);
 }
 const escapeMeta = s => String(s).replace(/[=;#\\\n]/g, c => `\\${c}`);
 /** ffmetadata text for FFmpeg's -map_chapters (millisecond timebase). */
