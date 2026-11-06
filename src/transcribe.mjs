@@ -14,6 +14,8 @@ const exe = name => `${name}${process.platform === 'win32' ? '.exe' : ''}`;
 export const WHISPER_ROOT = path.join(DATA_ROOT, 'tools', 'whisper');
 export const MODEL_ORDER = ['large-v3-turbo-q5_0', 'large-v3-turbo', 'small', 'base', 'small.en', 'base.en', 'medium', 'medium.en', 'large-v3', 'tiny', 'tiny.en'];
 export const MODEL_SIZES = { tiny: '75 MB', base: '142 MB', small: '466 MB', medium: '1.5 GB', 'large-v3-turbo': '1.6 GB', 'large-v3-turbo-q5_0': '547 MB' };
+/** Model names whisper.cpp publishes as ggml-<name>.bin: a size, then optional .en, -turbo and quantization. */
+export const MODEL_NAME = /^(tiny|base|small|medium|large-v[123](-turbo)?)(\.en)?(-q[58]_[01])?$/;
 
 function walk(dir, depth = 3) {
   const found = [];
@@ -141,7 +143,7 @@ export async function transcribeFile(file, { language = 'auto', model: wanted, w
 
 /** Downloads whisper.cpp (Windows release zip) and a model into the data folder. Explicit user action only. */
 export async function setupSpeech({ model = 'base', onLog = () => {}, fetchImpl = fetch } = {}) {
-  if (!/^[a-z0-9.\-_]{2,40}$/.test(model)) throw new StudioError('INVALID_MODEL', 'Invalid model name.');
+  if (!MODEL_NAME.test(model)) throw new StudioError('INVALID_MODEL', `Unknown model "${model}". Common names: tiny, base, small, medium, large-v3-turbo (add .en for English only, or -q5_0 for a smaller build).`);
   await fsp.mkdir(path.join(WHISPER_ROOT, 'models'), { recursive: true });
   const result = { folder: WHISPER_ROOT, downloaded: [] };
   if (!findWhisperCli()) {
@@ -172,11 +174,16 @@ async function download(url, target, fetchImpl, onLog) {
   const partial = `${target}.partial`;
   const handle = await fsp.open(partial, 'w');
   let received = 0, shown = 0; const total = Number(response.headers.get('content-length')) || 0;
+  let completed = false;
   try {
     for await (const chunk of response.body) {
       await handle.write(chunk); received += chunk.length;
       if (received - shown > 25 * 1024 ** 2) { shown = received; onLog(`  ${(received / 1024 ** 2).toFixed(0)} MB${total ? ` / ${(total / 1024 ** 2).toFixed(0)} MB` : ''}`); }
     }
-  } finally { await handle.close(); }
+    completed = true;
+  } finally { 
+    await handle.close();
+    if (!completed) await fsp.rm(partial, { force: true });
+  }
   await fsp.rename(partial, target);
 }
