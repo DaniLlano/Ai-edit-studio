@@ -29,7 +29,7 @@ export function cueWords(cue) {
   return parts.map((text, i) => { const d = span * weights[i] / total; const w = { start: t, end: t + d, text }; t += d; return w; });
 }
 function stamp(value) {
-  const m = value.trim().match(/^(\d{2}):([0-5]\d):([0-5]\d)[,.](\d{3})$/);
+  const m = value.trim().match(/^(\d+):([0-5]\d):([0-5]\d)[,.](\d{3})$/);
   if (!m) throw new Error('SRT requires times like 00:00:01,250.');
   return +m[1] * 3600 + +m[2] * 60 + +m[3] + +m[4] / 1000;
 }
@@ -40,7 +40,7 @@ function cueFromBlock(block, sourceIndex) {
   const lines = block.split('\n'); if (/^\d+$/.test(lines[0].trim())) lines.shift();
   const times = lines.shift()?.split('-->');
   if (times?.length !== 2 || !lines.length) throw new Error('Invalid SRT block.');
-  return { sourceIndex, start: stamp(times[0]), end: stamp(times[1]), text: lines.join(' ').replace(/<[^>]*>/g, '') };
+  return { sourceIndex, start: stamp(times[0]), end: stamp(times[1].trim().split(/\s+/)[0]), text: lines.join(' ').replace(/<[^>]*>/g, '') };
 }
 export function parseSrt(text, sourceIndex = 0) {
   if (text.length > 128 * 1024) throw new Error('SRT is too large (at most 128 KiB).');

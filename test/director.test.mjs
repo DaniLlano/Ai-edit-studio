@@ -75,6 +75,16 @@ test('SRT captions follow source trims, reorder, speed and timing correction', (
   assert.throws(() => parseSrt('1\nnot a time\nHello')); assert.throws(() => normalizeCaptions([{ sourceIndex: 0, start: 5, end: 2, text: 'bad' }]));
   assert.throws(() => validateCaptionSources(cues, [{ duration: 3 }]));
 });
+test('SRT: one-digit hours and position coordinates after the end time are accepted', () => {
+  const pick = ({ start, end, text }) => ({ start, end, text });
+  const hour = '1\n0:00:01,000 --> 0:00:02,000\nHi';
+  const coords = '1\n00:00:01,000 --> 00:00:02,000 X1:100 X2:200 Y1:10 Y2:20\nHi';
+  for (const srt of [hour, coords]) {
+    assert.deepEqual(pick(parseSrt(srt)[0]), { start: 1, end: 2, text: 'Hi' });
+    assert.deepEqual(pick(parseSrtCues(srt)[0]), { start: 1, end: 2, text: 'Hi' });
+  }
+  assert.throws(() => parseSrt('1\n00:00:01,000 --> not a time\nHi'), /SRT requires times/);
+});
 test('transcript cues drop the caption limits; VTT reads header, settings, ids and short times', () => {
   const long = Array.from({ length: 400 }, (_, i) => `${i + 1}\n00:00:${String(i % 60).padStart(2, '0')},${String((i * 7) % 1000).padStart(3, '0')} --> 00:00:${String((i + 1) % 60).padStart(2, '0')},000\ncue ${i + 1}`).join('\n\n');
   assert.equal(parseSrtCues(long).length, 400);
